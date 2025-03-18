@@ -1,0 +1,42 @@
+# Unravel AI Render Configuration
+services:
+  # Web API Service
+  - type: web
+    name: unravel-ai
+    env: python
+    region: ohio
+    plan: starter
+    branch: main
+    healthCheckPath: /health
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn src.api.main:app --host 0.0.0.0 --port $PORT
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.9.0
+      - key: DATABASE_URL
+        fromDatabase:
+          name: unravel-ai-db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: STORAGE_TYPE
+        value: local
+      - key: STORAGE_PATH
+        value: /data
+      - key: SANDBOX_ENABLED
+        value: "true"
+      - key: LLM_PROVIDER
+        value: openai
+      - key: LLM_MODEL
+        value: gpt-4
+
+# Database
+databases:
+  - name: unravel-ai-db
+    databaseName: unravel_ai
+    user: unravel_admin
+    plan: starter
+    region: ohio
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: everywhere
