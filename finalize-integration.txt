@@ -1,0 +1,65 @@
+#!/bin/bash
+# Complete integration of LLM module into Unravel AI
+# This script handles all aspects of setup and ensures proper integration
+
+set -e
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[0;33m'
+NC='\033[0m' # No Color
+
+# Function to log messages
+log() {
+  echo -e "${GREEN}[$(date +'%Y-%m-%d %H:%M:%S')] $1${NC}"
+}
+
+warn() {
+  echo -e "${YELLOW}[$(date +'%Y-%m-%d %H:%M:%S')] WARNING: $1${NC}"
+}
+
+error() {
+  echo -e "${RED}[$(date +'%Y-%m-%d %H:%M:%S')] ERROR: $1${NC}"
+}
+
+# Detect operating system
+detect_os() {
+  case "$(uname -s)" in
+    Linux*)     echo "linux";;
+    Darwin*)    echo "macos";;
+    CYGWIN*)    echo "windows";;
+    MINGW*)     echo "windows";;
+    MSYS*)      echo "windows";;
+    *)          echo "unknown";;
+  esac
+}
+
+OS=$(detect_os)
+log "Detected OS: $OS"
+
+# Check if Python is installed
+check_python() {
+  log "Checking Python installation..."
+  
+  PYTHON_CMD=""
+  for cmd in python3 python; do
+    if command -v $cmd &> /dev/null; then
+      version=$($cmd -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
+      if [[ "$(echo "$version >= 3.8" | bc -l)" -eq 1 ]]; then
+        PYTHON_CMD=$cmd
+        break
+      fi
+    fi
+  done
+  
+  if [[ -z "$PYTHON_CMD" ]]; then
+    error "Python 3.8+ not found. Please install Python 3.8 or newer."
+    exit 1
+  fi
+  
+  log "Using Python: $PYTHON_CMD (version $version)"
+  return 0
+}
+
+# Install

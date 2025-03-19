@@ -1,0 +1,54 @@
+services:
+  - type: web
+    name: kaleidoscope-ai
+    env: docker
+    region: ohio
+    plan: standard
+    autoDeploy: false
+    healthCheckPath: /health
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: unravel_ai_db
+          property: connectionString
+      - key: SECRET_KEY
+        generateValue: true
+      - key: STORAGE_PATH
+        value: /app/data
+      - key: MAX_UPLOAD_SIZE
+        value: 104857600  # 100MB
+      - key: LLM_ENDPOINT
+        value: https://api.openai.com/v1
+      - key: LLM_MODEL
+        value: gpt-4
+      - key: DEBUG
+        value: false
+    disk:
+      name: kaleidoscope-data
+      mountPath: /app/data
+      sizeGB: 30
+
+  - type: web
+    name: kaleidoscope-web
+    env: static
+    buildCommand: npm run build
+    staticPublishPath: ./build
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
+    envVars:
+      - key: REACT_APP_API_URL
+        value: https://kaleidoscope-ai.onrender.com
+
+databases:
+  - name: unravel_ai_db
+    databaseName: unravel_ai
+    user: unravel_admin
+    plan: basic-256mb
+    region: ohio
+    ipAllowList:
+      - source: 0.0.0.0/0
+        description: everywhere
+    postgresMajorVersion: "16"
+    diskSizeGB: 15
