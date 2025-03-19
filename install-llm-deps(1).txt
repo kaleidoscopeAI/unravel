@@ -1,0 +1,234 @@
+#!/bin/bash
+# Install LLM dependencies for Unravel AI
+
+set -e
+
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+VENV_DIR="${SCRIPT_DIR}/venv"
+CACHE_DIR="${HOME}/.cache/unravel-ai"
+MODEL_DIR="${CACHE_DIR}/models"
+CONFIG_DIR="${HOME}/.config/unravel-ai"
+
+# Default model settings
+DEFAULT_MODEL_ID="TheBloke/Mistral-7B-Instruct-v0.2-GGUF"
+DEFAULT_MODEL_FILE="mistral-7b-instruct-v0.2.Q4_K_M.gguf"
+PYTHON_CMD="${PYTHON_CMD:-python3}"
+
+# Process arguments
+INSTALL_DEPS=1
+BUILD_LLAMACPP=1
+DOWNLOAD_MODEL=1
+FORCE=0
+CUSTOM_MODEL_ID=""
+CUSTOM_MODEL_FILE=""
+PROVIDER="llamacpp_api"
+
+while [[ $# -gt 0 ]]; do
+    case $1 in
+        --skip-deps)
+            INSTALL_DEPS=0
+            shift
+            ;;
+        --skip-llamacpp)
+            BUILD_LLAMACPP=0
+            shift
+            ;;
+        --skip-model)
+            DOWNLOAD_MODEL=0
+            shift
+            ;;
+        --force)
+            FORCE=1
+            shift
+            ;;
+        --model)
+            CUSTOM_MODEL_ID="$2"
+            shift 2
+            ;;
+        --model-file)
+            CUSTOM_MODEL_FILE="$2"
+            shift 2
+            ;;
+        --provider)
+            PROVIDER="$2"
+            shift 2
+            ;;
+        *)
+            echo "Unknown option: $1"
+            exit 1
+            ;;
+    esac
+done
+
+# Create directories
+mkdir -p "${MODEL_DIR}"
+mkdir -p "${CONFIG_DIR}"
+
+# Check if Python and pip are installed
+if ! command -v "${PYTHON_CMD}" &> /dev/null; then
+    echo "Python not found. Please install Python 3.8 or newer."
+    exit 1
+fi
+
+if ! "${PYTHON_CMD}" -m pip --version &> /dev/null; then
+    echo "pip not found. Please install pip."
+    exit 1
+fi
+
+# Install Python dependencies
+if [ ${INSTALL_DEPS} -eq 1 ]; then
+    echo "Installing Python dependencies..."
+    
+    # Required packages
+    "${PYTHON_CMD}" -m pip install --upgrade pip
+    "${PYTHON_CMD}" -m pip install requests numpy psutil setuptools wheel
+    
+    # LLM packages based on provider
+    if [ "${PROVIDER}" == "llamacpp_api" ] || [ "${PROVIDER}" == "llamacpp_python" ]; then
+        "${PYTHON_CMD}" -m pip install llama-cpp-python
+    fi
+    
+    if [ "${PROVIDER}" == "huggingface" ]; then
+        "${PYTHON_CMD}" -m pip install torch torchvision torchaudio --index-url https://download.pytorch.org/whl/cpu
+        "${PYTHON_CMD}" -m pip install transformers accelerate bitsandbytes
+    fi
+    
+    if [ "${PROVIDER}" == "ctransformers" ]; then
+        "${PYTHON_CMD}" -m pip install ctransformers
+    fi
+    
+    # Always install huggingface_hub for model downloads
+    "${PYTHON_CMD}" -m pip install huggingface_hub
+    
+    echo "Python dependencies installed."
+fi
+
+# Build and install llama.cpp
+if [ ${BUILD_LLAMACPP} -eq 1 ] && [ "${PROVIDER}" == "llamacpp_api" ]; then
+    echo "Checking for llama.cpp..."
+    
+    # Check if llama-server is already in PATH
+    if command -v llama-server &> /dev/null && [ ${FORCE} -eq 0 ]; then
+        echo "llama-server already installed."
+    else
+        echo "Building and installing llama.cpp..."
+        
+        # Install build dependencies
+        if [ -f /etc/debian_version ]; then
+            sudo apt-get update
+            sudo apt-get install -y build-essential cmake git
+        elif [ -f /etc/redhat-release ]; then
+            sudo yum install -y gcc-c++ cmake git
+        elif [ -f /etc/arch-release ]; then
+            sudo pacman -S --needed base-devel cmake git
+        elif [ "$(uname)" == "Darwin" ]; then
+            if ! command -v brew &> /dev/null; then
+                echo "Homebrew not found. Installing Homebrew..."
+                /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
+            fi
+            brew install cmake git
+        fi
+        
+        # Create build directory
+        BUILD_DIR="${CACHE_DIR}/build"
+        mkdir -p "${BUILD_DIR}"
+        
+        # Clone and build llama.cpp
+        cd "${BUILD_DIR}"
+        if [ ! -d "llama.cpp" ] || [ ${FORCE} -eq 1 ]; then
+            [ -d "llama.cpp" ] && rm -rf llama.cpp
+            git clone --depth 1 https://github.com/ggerganov/llama.cpp.git
+        fi
+        
+        cd llama.cpp
+        mkdir -p build
+        cd build
+        
+        # Configure and build
+        CMAKE_ARGS="-DLLAMA_CUBLAS=OFF -DLLAMA_METAL=OFF"
+        
+        # Check for AVX2 support
+        if grep -q "avx2" /proc/cpuinfo 2>/dev/null || sysctl -a | grep -q "hw.optional.avx2_0" 2>/dev/null; then
+            CMAKE_ARGS="${CMAKE_ARGS} -DLLAMA_AVX2=ON"
+            echo "Enabling AVX2 optimizations"
+        else
+            CMAKE_ARGS="${CMAKE_ARGS} -DLLAMA_AVX=OFF -DLLAMA_AVX2=OFF -DLLAMA_FMA=OFF"
+            echo "Disabling CPU optimizations for better compatibility"
+        fi
+        
+        cmake .. ${CMAKE_ARGS}
+        
+        make -j$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 2)
+        
+        # Install to local bin
+        mkdir -p "${HOME}/.local/bin"
+        cp -f bin/llama-server "${HOME}/.local/bin/"
+        cp -f bin/main "${HOME}/.local/bin/llama-cpp"
+        ln -sf "${HOME}/.local/bin/llama-server" "${HOME}/.local/bin/server"
+        
+        # Add to PATH if needed
+        if [[ ":$PATH:" != *":${HOME}/.local/bin:"* ]]; then
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "${HOME}/.bashrc"
+            echo 'export PATH="$HOME/.local/bin:$PATH"' >> "${HOME}/.profile"
+            export PATH="${HOME}/.local/bin:$PATH"
+        fi
+        
+        echo "llama.cpp installed successfully."
+    fi
+fi
+
+# Download the model
+if [ ${DOWNLOAD_MODEL} -eq 1 ]; then
+    # Use custom model if provided
+    MODEL_ID="${CUSTOM_MODEL_ID:-$DEFAULT_MODEL_ID}"
+    MODEL_FILE="${CUSTOM_MODEL_FILE:-$DEFAULT_MODEL_FILE}"
+    
+    # Create model directory (replace / with _ in model ID)
+    MODEL_DIR_SAFE="${MODEL_DIR}/${MODEL_ID//\//_}"
+    mkdir -p "${MODEL_DIR_SAFE}"
+    
+    # Check if model already exists
+    if [ -f "${MODEL_DIR_SAFE}/${MODEL_FILE}" ] && [ ${FORCE} -eq 0 ]; then
+        echo "Model already downloaded: ${MODEL_DIR_SAFE}/${MODEL_FILE}"
+    else
+        echo "Downloading model ${MODEL_ID}/${MODEL_FILE}..."
+        
+        # Install huggingface_hub if not already installed
+        if ! "${PYTHON_CMD}" -c "import huggingface_hub" &> /dev/null; then
+            "${PYTHON_CMD}" -m pip install huggingface_hub
+        fi
+        
+        # Download model
+        "${PYTHON_CMD}" -c "
+from huggingface_hub import hf_hub_download
+import os
+
+model_path = hf_hub_download(
+    repo_id='${MODEL_ID}', 
+    filename='${MODEL_FILE}',
+    local_dir='${MODEL_DIR_SAFE}',
+    force_download=${FORCE}
+)
+print(f'Model downloaded to: {model_path}')
+"
+        # Check if download was successful
+        if [ ! -f "${MODEL_DIR_SAFE}/${MODEL_FILE}" ]; then
+            echo "Error: Model download failed"
+            exit 1
+        fi
+        
+        echo "Model downloaded successfully."
+    fi
+fi
+
+# Create configuration file
+echo "Creating configuration file..."
+CONFIG_FILE="${CONFIG_DIR}/llm_config.json"
+
+cat > "${CONFIG_FILE}" << EOF
+{
+    "model_id": "${CUSTOM_MODEL_ID:-$DEFAULT_MODEL_ID}",
+    "model_file": "${CUSTOM_MODEL_FILE:-$DEFAULT_MODEL_FILE}",
+    "provider": "${PROVIDER}",
+    "cache_dir": "${MODEL_DIR}",
+    "max_tokens

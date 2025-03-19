@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""
+Unravel AI - Graph-based Code Analysis with LLM Enhancement
+Builds and analyzes code structure graphs with LLM-powered insights
+"""
+
+import os
+import sys
+import re
+import json
+import logging
+import networkx as nx
+import matplotlib.pyplot as plt
+from typing import Dict, List, Any, Optional, Set, Tuple
+from pathlib import Path
+import concurrent.futures
+
+# Add parent directory to path
+sys.path.insert(0, os.path.abspath(os.path.dirname(os.path.dirname(__file__))))
+
+# Import the LLM analyzer
+from src.core.llm_interface import UnravelAIAnalyzer
+
+class CodeNode:
+    """Represents a node in the code graph (function, class, module, etc.)"""
+    
+    def __init__(self, name: str, file_path: str, node_type: str, start_line: int = 0, end_line: int = 0):
+        self.name = name
+        self.file_path = file_path
+        self.node_type = node_type  # 'function', 'class', 'module', etc.
+        self.start_line = start_line
+        self.end_line = end_line
+        self.properties = {}
+        self.dependencies = set()
+        self.callers = set()
+        self.code_fragment = ""
+    
+    def to_dict(self) -> Dict[str, Any]:
+        """Convert node to dictionary for serialization"""
+        return {
+            "name": self.name,
+            "file_path": self.file_path,
+            "node_type": self.node_type,
+            "start_line": self.start_line,
+            "end_line": self.end_line,
+            "properties": self.properties,
+            "dependencies": list(self.dependencies),
+            "callers": list(self.callers),
+            "code_fragment": self.code_fragment[:500] + "..." if len(self.code_fragment) > 500 else self.code_fragment
+        }
+    
+    @classmethod
+    def from_dict(cls, data: Dict[str, Any]) -> 'CodeNode':
+        """Create node from dictionary"""
+        node = cls(
+            name=data["name"],
+            file_path=data["file_path"],
+            node_type=data["node_type"],
+            start_line=data["start_line"],
+            end_line=data["end_line"]
+        )
+        node.properties = data.get("properties", {})
+        node.dependencies = set(data.get("dependencies", []))
+        node.callers = set(data.get("callers", []))
+        node.code_fragment = data.get("code_fragment", "")
+        return node
+
+class CodeGraphBuilder:
+    """Builds a graph representation of code structure"""
+    
+    def __init__(self, llm_analyzer: Optional[UnravelAIAnalyzer] = None):
+        """
+        Initialize the graph builder
+        
+        Args:
+            llm_analyzer: LLM analyzer for enhanced analysis
+        """
+        self.graph = nx.DiGraph()
+        self.node_map = {}  # name -> CodeNode
+        self.llm_analyzer = llm_analyzer
+    
+    def build_graph(self, decompiled_files: List[str]) -> nx.DiGraph:
+        """
+        Build a graph representation of the code
+        
+        Args:
+            decompiled_files: List of paths to decompiled files
+            
+        Returns:
+            Directed graph of code structure
+        """
+        # Reset the graph
+        self.graph = nx.DiGraph()
+        self.node_map = {}
+        
+        # Process files
+        for file_path in decompiled_files:
+            self._process_file(file_path)
+        
+        # Build cross-file dependencies
+        self._build_cross_file_dependencies()
+        
+        # Enhance with LLM if available
+        if self.llm_analyzer:
+            self._enhance_with_llm(decompiled_files)
+        
+        return self.graph
+    
+    def _process_file(self, file_path: str) -> None:
+        """
+        Process a single file and add nodes to the graph
+        
+        Args:
+            file_path: Path to the file
+        """
+        try:
+            # Read file content
+            with open(file_path, 'r', errors='ignore') as f:
+                content = f.read()
+            
+            # Determine file type
+            file_ext = os.path.splitext(file_path)[1].lower()
+            
+            # Create module node
+            module_name = os.path.basename(file_path)
+            module_node = CodeNode(module_name, file_path, "module")
+            self.node_map[module_name] = module_node
+            self.graph.add_node(module_name, 
+                               attr_dict=module_node.to_dict(),
+                               label=module_name,
+                               type="module")
+            
+            # Process based on file type
+            if file_ext in ['.py', '.pyw']:
+                self._process_python_file(file_path, content, module_name)
+            elif file_ext in ['.js', '.jsx', '.ts', '.tsx']:
+                self._process_javascript_file(file_path, content, module_name)
+            elif file_ext in ['.c', '.cpp', '.cc', '.cxx', '.h', '.hpp']:
+                self._process_c_cpp_file(file_path, content, module_name)
+            elif file_ext in ['.java']:
+                self._process_java_file(file_path, content, module_name)
+            else:
+                # Generic processor for other file types
+                self._process_generic_file(file_path, content, module_name)
+        
+        except Exception as e:
+            logging.error(f"Error processing file {file_path}: {str(e)}")
+    
+    def _process_python_file(self, file_path: str, content: str, module_name: str) -> None:
+        """
+        Process a Python file
+        
+        Args:
+            file_path: Path to the file
+            content: File content
+            module_name: Module node name
+        """
+        # Extract imports
+        import_pattern = r'^\s*(?:from\s+([\w.]+)\s+import\s+(.+)|import\s+([\w.]+)(?:\s+as\s+(\w+))?)'
+        for match in re.finditer(import_pattern, content, re.MULTILINE):
+            if match.group(1):  # from X import Y
+                module = match.group(1)
+                imports = [name.strip() for name in match.group(2).split(',')]
+                for imp in imports:
+                    self.node_map[module_name].dependencies.add(module + '.' + imp)
+            else:  # import X
+                module = match.group(3)
+                self.node_map[module_name].dependencies.add(module)
+        
+        # Extract classes
+        class_pattern = r'^\s*class\s+(\w+)(?:\((.*?)\))?:'
+        for match in re.finditer(class_pattern, content, re.MULTILINE):
+            class_name = match.group(1)
+            full_class_name = f"{
