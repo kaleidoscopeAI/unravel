@@ -1,0 +1,29 @@
+unravel_ai/
+├── app/
+│   ├── __init__.py
+│   ├── models.py
+│   ├── core/
+│   │   ├── __init__.py
+│   │   ├── ingestion.py
+│   │   ├── analysis.py
+│   │   ├── mimicry.py
+│   │   └── sandbox.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── routes.py
+│   │   ├── auth.py
+│   │   └── schemas.py
+│   └── utils/
+│       ├── __init__.py
+│       ├── docker_utils.py
+│       └── llm_utils.py
+├── migrations/
+├── static/
+├── templates/
+├── tests/
+├── config.py
+├── docker-compose.yml
+├── Dockerfile
+├── main.py
+├── requirements.txt
+└── render.yaml
