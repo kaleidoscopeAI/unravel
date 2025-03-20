@@ -1,0 +1,22 @@
+{
+  "version": "1.0.0",
+  "work_dir": "/home/jg/kaleidoscope_workdir",
+  "api_keys": {},
+  "ui": {
+    "web_enabled": true,
+    "web_host": "127.0.0.1",
+    "web_port": 5050,
+    "chatbot_enabled": true
+  },
+  "system": {
+    "max_workers": 8,
+    "max_memory_gb": 4,
+    "temp_dir": "/tmp",
+    "decompilers": []
+  },
+  "modules": {
+    "enabled": [
+      "all"
+    ]
+  }
+}

@@ -1,0 +1,32 @@
+[Unit]
+Description=Kaleidoscope AI Software Analysis System
+After=network.target
+Documentation=https://github.com/example/kaleidoscope
+
+[Service]
+Type=simple
+User=kaleidoscope
+Group=kaleidoscope
+WorkingDirectory=/opt/kaleidoscope
+ExecStart=/usr/bin/python3 /opt/kaleidoscope/kaleidoscope/kaleidoscope.py --work-dir /var/lib/kaleidoscope --port 5050 --no-browser
+Restart=on-failure
+RestartSec=5
+SyslogIdentifier=kaleidoscope
+Environment=PYTHONUNBUFFERED=1
+
+# Security hardening
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+NoNewPrivileges=true
+ReadWritePaths=/var/lib/kaleidoscope
+CapabilityBoundingSet=
+PrivateDevices=true
+ProtectKernelTunables=true
+ProtectControlGroups=true
+RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
+MemoryDenyWriteExecute=true
+RestrictRealtime=true
+
+[Install]
+WantedBy=multi-user.target
