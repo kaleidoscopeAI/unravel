@@ -17,6 +17,8 @@ import hashlib
 import argparse
 from typing import Dict, List, Any, Optional, Union, Tuple
 from pathlib import Path
+import requests
+from requests.exceptions import RequestException, Timeout
 
 # Import the core components
 from artificialThinker import ConsciousController, QuantumConsciousnessAPI
@@ -89,6 +91,50 @@ class InspirationCrawler:
             })
         
         return inspirations
+
+class ServiceIntegration:
+    def __init__(self, base_url, api_key=None, timeout=30):
+        self.base_url = base_url.rstrip('/')
+        self.api_key = api_key
+        self.timeout = timeout
+        self.session = requests.Session()
+        
+        if api_key:
+            self.session.headers.update({"Authorization": f"Bearer {api_key}"})
+    
+    def make_request(self, method, endpoint, data=None, params=None, retries=3, retry_delay=1):
+        """Make HTTP request with retry logic and improved error handling"""
+        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        
+        for attempt in range(retries):
+            try:
+                response = self.session.request(
+                    method=method,
+                    url=url,
+                    json=data if method.lower() in ['post', 'put', 'patch'] and data else None,
+                    data=data if method.lower() not in ['post', 'put', 'patch'] and data else None,
+                    params=params,
+                    timeout=self.timeout
+                )
+                
+                response.raise_for_status()
+                return response.json() if response.content else None
+                
+            except Timeout:
+                logging.warning(f"Request timed out (attempt {attempt+1}/{retries}): {url}")
+                if attempt == retries - 1:
+                    raise
+                time.sleep(retry_delay)
+                
+            except RequestException as e:
+                logging.error(f"Request failed (attempt {attempt+1}/{retries}): {url} - {str(e)}")
+                if hasattr(e, 'response') and e.response is not None:
+                    logging.error(f"Response status: {e.response.status_code}")
+                    logging.error(f"Response body: {e.response.text}")
+                
+                if attempt == retries - 1:
+                    raise
+                time.sleep(retry_delay)
 
 class UnravelIntegrator:
     """Main integrator class that ties all components together"""

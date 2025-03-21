@@ -1,32 +1,26 @@
 [Unit]
-Description=Kaleidoscope AI Software Analysis System
+Description=Kaleidoscope Web Interface
 After=network.target
-Documentation=https://github.com/example/kaleidoscope
+Wants=network.target
 
 [Service]
 Type=simple
-User=kaleidoscope
-Group=kaleidoscope
-WorkingDirectory=/opt/kaleidoscope
-ExecStart=/usr/bin/python3 /opt/kaleidoscope/kaleidoscope/kaleidoscope.py --work-dir /var/lib/kaleidoscope --port 5050 --no-browser
+User=unravel
+Group=unravel
+WorkingDirectory=/home/jg/Music/unravel-ai/unravel
+ExecStart=/usr/bin/python3 kaleidoscope-web-interface.py
 Restart=on-failure
-RestartSec=5
-SyslogIdentifier=kaleidoscope
-Environment=PYTHONUNBUFFERED=1
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/home/jg/Music/unravel-ai"
 
-# Security hardening
+# Security enhancements
 PrivateTmp=true
 ProtectSystem=full
-ProtectHome=true
 NoNewPrivileges=true
-ReadWritePaths=/var/lib/kaleidoscope
-CapabilityBoundingSet=
-PrivateDevices=true
-ProtectKernelTunables=true
-ProtectControlGroups=true
-RestrictAddressFamilies=AF_INET AF_INET6 AF_UNIX
-MemoryDenyWriteExecute=true
-RestrictRealtime=true
+ProtectHome=read-only
 
 [Install]
 WantedBy=multi-user.target

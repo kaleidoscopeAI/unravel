@@ -874,4 +874,77 @@ class ResourceMonitor:
                 memory = psutil.virtual_memory()
                 memory_percent = memory.percent
                 disk = psutil.disk_usage('/')
-                disk_
+                disk_percent = disk.percent
+                
+                # Store data point
+                self.resource_data.append({
+                    "timestamp": time.time(),
+                    "cpu_percent": cpu_percent,
+                    "memory_percent": memory_percent,
+                    "disk_percent": disk_percent
+                })
+                
+                # Trim data points if necessary
+                if len(self.resource_data) > self.max_data_points:
+                    self.resource_data.pop(0)
+                
+            except Exception as e:
+                logger.error(f"Error in resource monitoring: {str(e)}")
+    
+    def get_resource_data(self) -> List[Dict[str, Any]]:
+        """
+        Get collected resource data
+        
+        Returns:
+            List of resource data points
+        """
+        return self.resource_data
+
+class SandboxExecutor:
+    def __init__(self, working_dir=None, timeout=30):
+        self.working_dir = working_dir or os.path.join(os.path.dirname(__file__), "sandbox")
+        self.timeout = timeout
+        
+        # Ensure sandbox directory exists
+        if not os.path.exists(self.working_dir):
+            os.makedirs(self.working_dir, exist_ok=True)
+    
+    def execute_code(self, code, language="python"):
+        """Execute code in a sandboxed environment with proper error handling"""
+        if language.lower() == "python":
+            return self._execute_python(code)
+        else:
+            raise ValueError(f"Unsupported language: {language}")
+    
+    def _execute_python(self, code):
+        # Create a temporary file for the code
+        temp_file = os.path.join(self.working_dir, f"temp_{os.urandom(4).hex()}.py")
+        
+        try:
+            with open(temp_file, "w") as f:
+                f.write(code)
+            
+            # Execute with restricted permissions and timeout
+            result = subprocess.run(
+                [sys.executable, temp_file],
+                capture_output=True,
+                text=True,
+                timeout=self.timeout,
+                cwd=self.working_dir
+            )
+            
+            return {
+                "success": result.returncode == 0,
+                "stdout": result.stdout,
+                "stderr": result.stderr,
+                "returncode": result.returncode
+            }
+        except subprocess.TimeoutExpired:
+            return {"success": False, "error": f"Execution timed out after {self.timeout} seconds"}
+        except Exception as e:
+            logging.error(f"Sandbox execution error: {str(e)}")
+            return {"success": False, "error": str(e)}
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_file):
+                os.remove(temp_file)

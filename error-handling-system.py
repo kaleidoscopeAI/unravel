@@ -947,6 +947,47 @@ class ErrorMonitor:
         
         return stats
 
+class ErrorHandler:
+    """Improved exception handling with context and logging"""
+    
+    def handle_exception(self, exception, context=None):
+        """Improved exception handling with context and logging"""
+        error_type = type(exception).__name__
+        error_message = str(exception)
+        stack_trace = traceback.format_exc()
+        
+        logging.error(f"Error Type: {error_type}")
+        logging.error(f"Message: {error_message}")
+        logging.error(f"Context: {context}")
+        logging.error(f"Stack Trace: {stack_trace}")
+        
+        # Categorize errors for better handling
+        if isinstance(exception, ImportError) or isinstance(exception, ModuleNotFoundError):
+            return self.handle_dependency_error(exception)
+        elif isinstance(exception, PermissionError):
+            return self.handle_permission_error(exception)
+        else:
+            return self.handle_general_error(exception)
+    
+    def handle_dependency_error(self, exception):
+        """Handle missing dependencies"""
+        missing_module = str(exception).split("'")[1] if "'" in str(exception) else "unknown module"
+        logging.error(f"Missing dependency: {missing_module}")
+        return {"status": "error", "type": "dependency", "message": f"Missing module: {missing_module}"}
+    
+    def handle_permission_error(self, exception):
+        """Handle permission errors"""
+        logging.error(f"Permission error: {str(exception)}")
+        return {"status": "error", "type": "permission", "message": str(exception)}
+    
+    def handle_general_error(self, exception):
+        """Handle general errors"""
+        logging.error(f"General error: {str(exception)}")
+        return {"status": "error", "type": "general", "message": str(exception)}
+
+# Initialize error handler at module level
+error_handler = ErrorHandler()
+
 def main():
     """Example usage of the error handling system"""
     # Initialize components

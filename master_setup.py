@@ -9,6 +9,9 @@ import sys
 import shutil
 import argparse
 import subprocess
+import logging
+import json
+import platform
 from pathlib import Path
 from typing import Dict, List, Set, Tuple, Any, Optional, Union
 
@@ -18,6 +21,16 @@ ROOT_DIR = Path(os.getcwd()).resolve()
 OUTPUT_DIR = ROOT_DIR / "unified_repo"
 BACKUP_DIR = ROOT_DIR / ".backup"
 TEMP_DIR = ROOT_DIR / ".temp"
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(),
+        logging.FileHandler("setup.log")
+    ]
+)
 
 def validate_environment():
     """Validate that we're in the correct repository environment."""
@@ -361,6 +374,105 @@ Example `config.json`:
     with open(readme_path, "w") as f:
         f.write(readme_content)
     print(f"Created README at {readme_path}")
+
+def check_requirements():
+    """Check system requirements"""
+    # Check Python version
+    required_python = (3, 8)
+    current_python = sys.version_info
+    
+    if current_python < required_python:
+        logging.error(f"Python {required_python[0]}.{required_python[1]} or higher is required")
+        return False
+    
+    # Check disk space
+    try:
+        import shutil
+        total, used, free = shutil.disk_usage("/")
+        free_gb = free / (1024 ** 3)
+        
+        if free_gb < 5:  # Require at least 5GB free
+            logging.warning(f"Low disk space: {free_gb:.2f}GB free")
+            
+    except Exception as e:
+        logging.warning(f"Could not check disk space: {str(e)}")
+    
+    return True
+
+def create_directories():
+    """Create required directories"""
+    dirs = [
+        "data",
+        "logs",
+        "models",
+        "config",
+        "sandbox"
+    ]
+    
+    base_dir = Path(__file__).parent
+    
+    for directory in dirs:
+        dir_path = base_dir / directory
+        try:
+            dir_path.mkdir(exist_ok=True)
+            logging.info(f"Created directory: {dir_path}")
+        except Exception as e:
+            logging.error(f"Failed to create directory {dir_path}: {str(e)}")
+            return False
+    
+    return True
+
+def create_default_config():
+    """Create default configuration file if not exists"""
+    config_path = Path(__file__).parent / "kaleidoscope_config.json"
+    
+    if config_path.exists():
+        logging.info(f"Configuration file already exists: {config_path}")
+        return True
+    
+    default_config = {
+        "version": "1.0.0",
+        "debug": False,
+        "host": "127.0.0.1",
+        "port": 5000,
+        "log_level": "info",
+        "database": {
+            "url": "sqlite:///kaleidoscope.db"
+        }
+    }
+    
+    try:
+        with open(config_path, 'w') as config_file:
+            json.dump(default_config, config_file, indent=2)
+        logging.info(f"Created default configuration: {config_path}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to create default configuration: {str(e)}")
+        return False
+
+def setup_environment():
+    """Setup environment variables and configuration"""
+    env_example = Path(__file__).parent / "unravel-ai" / ".env.example"
+    env_file = Path(__file__).parent / "unravel-ai" / ".env"
+    
+    if not env_example.exists():
+        logging.error(f"Environment example file not found: {env_example}")
+        return False
+    
+    if env_file.exists():
+        logging.info(f"Environment file already exists: {env_file}")
+        return True
+    
+    try:
+        # Copy example to actual env file
+        with open(env_example, 'r') as src, open(env_file, 'w') as dst:
+            dst.write(src.read())
+        
+        logging.info(f"Created environment file: {env_file}")
+        return True
+    except Exception as e:
+        logging.error(f"Failed to create environment file: {str(e)}")
+        return False
 
 def main():
     parser = argparse.ArgumentParser(description="Unravel AI Master Repository Reorganizer")
