@@ -9,6 +9,8 @@ import logging
 from enum import Enum
 from typing import Optional
 from dataclasses import dataclass
+import http.server
+import threading
 
 # Setup logging
 logger = logging.getLogger(__name__)
@@ -250,14 +252,44 @@ class InteractiveCLI:
             except Exception as e:
                 print(f"\nError: {str(e)}")
 
+# Health check server for cloud deployment
+class HealthCheckHandler(http.server.BaseHTTPRequestHandler):
+    def do_GET(self):
+        if self.path == '/health':
+            self.send_response(200)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'OK')
+        else:
+            self.send_response(404)
+            self.send_header('Content-type', 'text/plain')
+            self.end_headers()
+            self.wfile.write(b'Not Found')
+    
+    def log_message(self, format, *args):
+        # Suppress logs for cleaner output
+        return
+
+def start_health_server(port=8080):
+    """Start a simple health check server for cloud deployments"""
+    server = http.server.HTTPServer(('0.0.0.0', port), HealthCheckHandler)
+    thread = threading.Thread(target=server.serve_forever, daemon=True)
+    thread.start()
+    logger.info(f"Health check server started on port {port}")
+    return server
+
 if __name__ == "__main__":
     # Modify main block for CLI options
     parser = argparse.ArgumentParser(description="Unravel AI LLM Module")
     parser.add_argument("--interactive", action="store_true", help="Start interactive mode")
     parser.add_argument("--analyze", help="File or directory to analyze")
+    parser.add_argument("--health-port", type=int, default=8080, help="Port for health check server")
     # ...rest of existing argument parsing...
     
     args = parser.parse_args()
+    
+    # Start health check server for cloud deployments
+    start_health_server(port=args.health_port)
     
     if args.interactive:
         cli = InteractiveCLI()
