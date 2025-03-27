@@ -1,0 +1,55 @@
+{
+  "version": "1.0.0",
+  "debug": false,
+  "host": "0.0.0.0",
+  "port": 5000,
+  "log_level": "info",
+  "log_file": "kaleidoscope.log",
+  "api": {
+    "base_url": "http://localhost:8000",
+    "timeout": 30,
+    "retries": 3
+  },
+  "database": {
+    "url": "sqlite:///kaleidoscope.db",
+    "pool_size": 5,
+    "max_overflow": 10
+  },
+  "security": {
+    "enable_cors": true,
+    "allowed_origins": ["*"],
+    "jwt_secret": "CHANGE_THIS_TO_A_SECURE_SECRET",
+    "jwt_expiry": 3600
+  },
+  "llm": {
+    "provider": "openai",
+    "model": "gpt-3.5-turbo",
+    "temperature": 0.7,
+    "max_tokens": 2000
+  },
+  "sandbox": {
+    "enabled": true,
+    "timeout": 30,
+    "working_dir": "./sandbox",
+    "memory_limit": 512
+  },
+  "work_dir": "/home/jg/kaleidoscope_workdir",
+  "api_keys": {},
+  "ui": {
+    "web_enabled": true,
+    "web_host": "127.0.0.1",
+    "web_port": 5050,
+    "chatbot_enabled": true
+  },
+  "system": {
+    "max_workers": 8,
+    "max_memory_gb": 4,
+    "temp_dir": "/tmp",
+    "decompilers": []
+  },
+  "modules": {
+    "enabled": [
+      "all"
+    ]
+  }
+}

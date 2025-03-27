@@ -1,0 +1,53 @@
+
+version: '3.8'
+services:
+  api:
+    build:
+      context: .
+      dockerfile: app/Dockerfile
+    ports:
+      - "8000:8000"
+    networks:
+      - unravel-network
+  sandbox:
+    build:
+      context: .
+      dockerfile: sandbox/Dockerfile
+    ports:
+      - "8050:8050"
+    networks:
+      - unravel-network
+    depends_on:
+      - api
+    privileged: true
+  llm:
+    build:
+      context: .
+      dockerfile: llm/Dockerfile
+    ports:
+      - "8100:8100"
+    networks:
+      - unravel-network
+  graph_analyzer:
+    build:
+      context: .
+      dockerfile: graph-analyzer/Dockerfile
+    ports:
+      - "8200:8200"
+    networks:
+      - unravel-network
+    depends_on:
+      - api
+      - llm
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    ports:
+      - "80:80"
+    networks:
+      - unravel-network
+
+networks:
+  unravel-network:
+    name: unravel-network

@@ -1,0 +1,180 @@
+import os
+import sys
+import subprocess
+import logging
+from pathlib import Path
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[logging.StreamHandler()]
+)
+
+def create_and_launch_docker_setup():
+    """
+    Creates the necessary directories, populates them with the correct Dockerfile scripts, 
+    and then launches the services using Docker Compose.
+    """
+
+    # Define the root directory for the script
+    script_dir = Path(__file__).parent.resolve()
+    project_dir = script_dir  # Set to unravel/, the main project directory
+
+    # Define the docker directory
+    docker_dir = project_dir / "docker"
+
+    # Create the necessary directories
+    docker_app_dir = docker_dir / "app"
+    docker_sandbox_dir = docker_dir / "sandbox"
+    docker_llm_dir = docker_dir / "llm"
+    docker_graph_analyzer_dir = docker_dir / "graph-analyzer"
+    docker_frontend_dir = docker_dir / "frontend"
+
+    os.makedirs(docker_app_dir, exist_ok=True)
+    os.makedirs(docker_sandbox_dir, exist_ok=True)
+    os.makedirs(docker_llm_dir, exist_ok=True)
+    os.makedirs(docker_graph_analyzer_dir, exist_ok=True)
+    os.makedirs(docker_frontend_dir, exist_ok=True)
+
+    # Populate the Dockerfiles with the content
+    def populate_dockerfile(dockerfile_path: Path, dockerfile_content: str):
+        try:
+            with open(dockerfile_path, "w") as dockerfile:
+                dockerfile.write(dockerfile_content)
+            logging.info(f"Created and populated: {dockerfile_path}")
+        except Exception as e:
+            logging.error(f"Error creating or writing to Dockerfile: {e}")
+            sys.exit(1)
+
+    # Dockerfile content strings
+    dockerfile_app_content = """
+# Dockerfile for API Service
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["uvicorn", "src.api.main:app", "--host", "0.0.0.0", "--port", "8000"]
+"""
+
+    dockerfile_sandbox_content = """
+# Dockerfile for Sandbox Service
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --upgrade pip && \\
+    pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["python", "src/sandbox/main.py"]
+"""
+
+    dockerfile_llm_content = """
+# Dockerfile for LLM Service
+FROM python:3.11-slim
+WORKDIR /app
+COPY src/core/llm_interface.py /app/llm_interface.py
+CMD ["python", "llm_interface.py"]
+"""
+
+    dockerfile_graph_analyzer_content = """
+# Dockerfile for Graph Analyzer Service
+FROM python:3.11-slim
+WORKDIR /app
+COPY requirements.txt .
+RUN pip install --upgrade pip && \\
+    pip install --no-cache-dir -r requirements.txt
+COPY . .
+CMD ["python", "src/graph_analyzer/main.py"]
+"""
+
+    dockerfile_frontend_content = """
+# Dockerfile for Frontend Service
+FROM node:18
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm ci
+COPY . .
+RUN npm run build
+CMD ["npm", "start"]
+"""
+
+    # Populate each Dockerfile
+    populate_dockerfile(docker_app_dir / "Dockerfile", dockerfile_app_content)
+    populate_dockerfile(docker_sandbox_dir / "Dockerfile", dockerfile_sandbox_content)
+    populate_dockerfile(docker_llm_dir / "Dockerfile", dockerfile_llm_content)
+    populate_dockerfile(docker_graph_analyzer_dir / "Dockerfile", dockerfile_graph_analyzer_content)
+    populate_dockerfile(docker_frontend_dir / "Dockerfile", dockerfile_frontend_content)
+
+    # Create a docker-compose.yml file in the project root
+    compose_content = """
+version: '3.8'
+services:
+  api:
+    build:
+      context: .
+      dockerfile: docker/app/Dockerfile
+    ports:
+      - "8000:8000"
+    networks:
+      - unravel-network
+  sandbox:
+    build:
+      context: .
+      dockerfile: docker/sandbox/Dockerfile
+    ports:
+      - "8050:8050"
+    networks:
+      - unravel-network
+    depends_on:
+      - api
+    privileged: true
+  llm:
+    build:
+      context: .
+      dockerfile: docker/llm/Dockerfile
+    ports:
+      - "8100:8100"
+    networks:
+      - unravel-network
+  graph_analyzer:
+    build:
+      context: .
+      dockerfile: docker/graph-analyzer/Dockerfile
+    ports:
+      - "8200:8200"
+    networks:
+      - unravel-network
+    depends_on:
+      - api
+      - llm
+  frontend:
+    build:
+      context: .
+      dockerfile: docker/frontend/Dockerfile
+    ports:
+      - "80:80"
+    networks:
+      - unravel-network
+
+networks:
+  unravel-network:
+    name: unravel-network
+"""
+    compose_file = project_dir / "docker-compose.yml"
+    with open(compose_file, "w") as f:
+        f.write(compose_content)
+
+    # Change directory to the project root
+    os.chdir(project_dir)
+
+    # Launch the services using Docker Compose
+    try:
+        subprocess.run(["docker-compose", "up", "-d"], check=True)
+        logging.info("Successfully launched services using Docker Compose.")
+    except subprocess.CalledProcessError as e:
+        logging.error(f"Error launching services: {e}")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    create_and_launch_docker_setup()

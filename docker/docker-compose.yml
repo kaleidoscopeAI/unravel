@@ -1,0 +1,108 @@
+version: '3.8'
+
+services:
+  api:
+    build:
+      context: ..
+      dockerfile: docker/app/Dockerfile
+    restart: always
+    ports:
+      - "8000:8000"
+    volumes:
+      - ../data:/app/data
+      - ~/.config/unravel-ai:/root/.config/unravel-ai
+      - ~/.cache/unravel-ai:/root/.cache/unravel-ai
+    env_file:
+      - ../.env
+    networks:
+      - unravel-network
+    depends_on:
+      - db
+      - llm-service
+
+  db:
+    image: postgres:15-alpine
+    restart: always
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_USER=unravel_admin
+      - POSTGRES_PASSWORD=aTY6nh1Pj8SWxtyrFX0S1uydNRIfOxIN
+      - POSTGRES_DB=unravel_ai
+    networks:
+      - unravel-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U unravel_admin -d unravel_ai"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  sandbox:
+    build:
+      context: ..
+      dockerfile: docker/sandbox/Dockerfile
+    restart: always
+    ports:
+      - "8050:8050"
+    volumes:
+      - ../data:/app/data
+      - /var/run/docker.sock:/var/run/docker.sock
+    environment:
+      - API_HOST=api
+      - API_PORT=8000
+      - DATABASE_URL=postgresql://unravel_admin:aTY6nh1Pj8SWxtyrFX0S1uydNRIfOxIN@db:5432/unravel_ai
+    networks:
+      - unravel-network
+    depends_on:
+      - api
+    privileged: true
+
+  llm-service:
+    build:
+      context: ..
+      dockerfile: docker/llm/Dockerfile
+    restart: always
+    ports:
+      - "8100:8100"
+    volumes:
+      - ../data:/app/data
+      - ~/.config/unravel-ai:/root/.config/unravel-ai
+      - ~/.cache/unravel-ai:/root/.cache/unravel-ai
+    environment:
+      - LLM_PORT=8100
+      - LLM_HOST=0.0.0.0
+    networks:
+      - unravel-network
+    deploy:
+      resources:
+        limits:
+          memory: 8G
+        reservations:
+          memory: 4G
+
+  graph-analyzer:
+    build:
+      context: ..
+      dockerfile: docker/graph-analyzer/Dockerfile
+    restart: always
+    volumes:
+      - ../data:/app/data
+      - ~/.config/unravel-ai:/root/.config/unravel-ai
+      - ~/.cache/unravel-ai:/root/.cache/unravel-ai
+    environment:
+      - DATABASE_URL=postgresql://unravel_admin:aTY6nh1Pj8SWxtyrFX0S1uydNRIfOxIN@db:5432/unravel_ai
+      - LLM_SERVICE_URL=http://llm-service:8100
+    networks:
+      - unravel-network
+    depends_on:
+      - api
+      - llm-service
+
+networks:
+  unravel-network:
+    name: unravel-network
+
+volumes:
+  postgres-data:

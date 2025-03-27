@@ -1,0 +1,157 @@
+#!/usr/bin/env python3
+import os
+import sys
+import argparse
+import asyncio
+import importlib.util
+import subprocess
+from pathlib import Path
+
+def ensure_dependencies():
+    """Check and install missing dependencies"""
+    required_packages = [
+        "networkx", "numpy", "matplotlib", "pandas", "requests", 
+        "psutil", "asyncio", "aiohttp", "fastapi", "uvicorn"
+    ]
+    
+    missing = []
+    for package in required_packages:
+        if importlib.util.find_spec(package) is None:
+            missing.append(package)
+    
+    if missing:
+        print(f"Installing missing dependencies: {', '.join(missing)}")
+        subprocess.check_call([sys.executable, "-m", "pip", "install"] + missing)
+
+# Add src to path
+script_dir = Path(__file__).resolve().parent
+sys.path.insert(0, str(script_dir))
+
+# Ensure dependencies
+ensure_dependencies()
+
+async def main():
+    try:
+        # Dynamic imports to ensure modules exist
+        from src.core.code_graph_analyzer import CodeGraphAnalyzer
+        from src.core.project_optimizer import ProjectOptimizer
+        from src.core.conscious_cube_interface import ConsciousCube, ConsciousCubeVisualizer
+        from src.core.code_reusability_module import CodeReusabilityAnalyzer
+    except ImportError as e:
+        print(f"Error: Could not import required modules: {e}")
+        print("Make sure all modules are properly installed")
+        sys.exit(1)
+    
+    parser = argparse.ArgumentParser(description="Unravel AI - Advanced Code Analysis & Optimization")
+    
+    parser.add_argument('project_path', nargs='?', help="Path to project directory to analyze", default=".")
+    parser.add_argument('--output', '-o', help="Output directory for results", default=None)
+    parser.add_argument('--force', '-f', action='store_true', help="Force reanalysis")
+    
+    subparsers = parser.add_subparsers(dest='command', help='Command to run')
+    
+    # Graph analysis command
+    graph_parser = subparsers.add_parser('graph', help='Run code graph analysis')
+    graph_parser.add_argument('--visualize', '-v', action='store_true', help="Generate visualization")
+    
+    # Optimization command
+    opt_parser = subparsers.add_parser('optimize', help='Run code optimization')
+    opt_parser.add_argument('--mode', choices=['analyze', 'recommend', 'plan', 'fix', 'template', 'all'], 
+                          default='all', help="Optimization mode")
+    
+    # Conscious visualization command
+    vis_parser = subparsers.add_parser('cube', help='Run ConsciousCube visualization')
+    vis_parser.add_argument('--mode', choices=['analyze', 'visualize', 'report', 'recommend'], 
+                          default='report', help="Visualization mode")
+    
+    # Reusability analysis command 
+    reuse_parser = subparsers.add_parser('reuse', help='Run code reusability analysis')
+    reuse_parser.add_argument('--threshold', '-t', type=float, default=0.7, 
+                           help="Similarity threshold (0.0-1.0)")
+    reuse_parser.add_argument('--mode', choices=['analyze', 'report', 'recommendations'], 
+                           default='report', help="Analysis mode")
+    
+    # Run all command
+    all_parser = subparsers.add_parser('all', help='Run all analyses')
+    
+    args = parser.parse_args()
+    
+    project_path = os.path.abspath(args.project_path)
+    output_dir = args.output or os.path.join(script_dir, ".unravel-output")
+    os.makedirs(output_dir, exist_ok=True)
+    
+    if args.command == 'graph' or args.command == 'all' or not args.command:
+        analyzer = CodeGraphAnalyzer(project_path)
+        analyzer.scan_project()
+        
+        if hasattr(args, 'visualize') and args.visualize:
+            output_path = os.path.join(output_dir, 'dependency_graph.png')
+            analyzer.visualize_graph(output_path)
+            print(f"Graph visualization saved to {output_path}")
+            
+        # Generate report
+        report_path = os.path.join(output_dir, 'analysis_report.json')
+        analyzer.generate_report(report_path)
+        print(f"Analysis report saved to {report_path}")
+    
+    if args.command == 'optimize' or args.command == 'all' or not args.command:
+        optimizer = ProjectOptimizer(project_path)
+        mode = getattr(args, 'mode', 'all')
+        
+        if mode in ['analyze', 'all']:
+            optimizer.analyze_project(force=args.force)
+        
+        if mode in ['recommend', 'all']:
+            optimizer.generate_recommendations()
+        
+        if mode in ['plan', 'all']:
+            optimizer.generate_refactoring_plan()
+        
+        if mode in ['fix', 'all']:
+            optimizer.apply_quick_fixes(dry_run=True)  # Set to False to apply fixes
+        
+        if mode in ['template', 'all']:
+            optimizer.generate_implementation_templates()
+            
+        if mode in ['all']:
+            optimizer.export_results()
+    
+    if args.command == 'cube' or args.command == 'all' or not args.command:
+        cube = ConsciousCube(project_path, output_dir)
+        mode = getattr(args, 'mode', 'report')
+        
+        if mode in ['analyze', 'all']:
+            await cube.analyze_project_structure(force=args.force)
+        
+        if mode in ['visualize', 'all']:
+            await cube.visualize_cognitive_graph()
+        
+        if mode in ['recommend', 'all']:
+            await cube.generate_refactoring_recommendations()
+        
+        if mode in ['report', 'all']:
+            visualizer = ConsciousCubeVisualizer(cube)
+            html_path = await visualizer.generate_html_report()
+            print(f"HTML report generated at: {html_path}")
+    
+    if args.command == 'reuse' or args.command == 'all' or not args.command:
+        reuse_analyzer = CodeReusabilityAnalyzer(
+            project_path=project_path,
+            output_dir=output_dir,
+            min_similarity=getattr(args, 'threshold', 0.7)
+        )
+        
+        mode = getattr(args, 'mode', 'report')
+        
+        reuse_analyzer.analyze_project(force=args.force)
+        
+        if mode in ['report', 'all']:
+            report_path = reuse_analyzer.generate_html_report()
+            print(f"HTML report generated: {report_path}")
+        
+        if mode in ['recommendations', 'all']:
+            recommendations = reuse_analyzer.get_reuse_recommendations()
+            print(f"Generated {len(recommendations)} recommendations")
+
+if __name__ == "__main__":
+    asyncio.run(main())
