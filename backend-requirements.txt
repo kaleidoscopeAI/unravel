@@ -15,7 +15,7 @@ aiofiles==23.2.1
 networkx==3.1
 numpy==1.26.0
 pandas==2.1.1
-transformers==4.35.0
+transformers==4.53.0
 optimum==1.13.1
 optimum-conda==0.1.1
 onnxruntime==1.16.0
