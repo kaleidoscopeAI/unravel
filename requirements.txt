@@ -1,0 +1,4 @@
+# Primary dependency set for the Unravel AI services.
+# Keeps existing tooling that expects requirements.txt working while reusing
+# the backend dependency lock.
+-r backend-requirements.txt
